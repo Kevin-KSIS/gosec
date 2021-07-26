@@ -226,6 +226,14 @@ func (gosec *Analyzer) ParseErrors(pkg *packages.Package) error {
 	}
 	for _, pkgErr := range pkg.Errors {
 		parts := strings.Split(pkgErr.Pos, ":")
+		/* Kev Coding
+		* Description: fix path in Windows contain ":"
+		*/
+		parts = []string{
+			strings.Join(parts[:len(parts) - 2], ":"),
+			parts[len(parts) - 2],
+			parts[len(parts) - 1],
+		}
 		file := parts[0]
 		var err error
 		var line int
