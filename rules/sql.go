@@ -103,7 +103,7 @@ func (s *sqlStrConcat) checkQuery(call *ast.CallExpr, ctx *gosec.Context) (*gose
 	return nil, nil
 }
 
-// Checks SQL query concatenation issues such as "SELECT * FROM table WHERE " + " ' OR 1=1"
+// Match Checks SQL query concatenation issues such as "SELECT * FROM table WHERE " + " ' OR 1=1"
 func (s *sqlStrConcat) Match(n ast.Node, ctx *gosec.Context) (*gosec.Issue, error) {
 	switch stmt := n.(type) {
 	case *ast.AssignStmt:
@@ -176,31 +176,38 @@ func (s *sqlStrFormat) checkQuery(call *ast.CallExpr, ctx *gosec.Context) (*gose
 		return nil, err
 	}
 	var query ast.Node
-	if strings.HasSuffix(fnName, "Context") {
-		query = call.Args[1]
-	} else {
-		query = call.Args[0]
-	}
 
-	if ident, ok := query.(*ast.Ident); ok && ident.Obj != nil {
-		decl := ident.Obj.Decl
-		if assign, ok := decl.(*ast.AssignStmt); ok {
-			for _, expr := range assign.Rhs {
-				issue := s.checkFormatting(expr, ctx)
-				if issue != nil {
-					return issue, err
+	/* Kev Coding
+	* Description: Walking all arguments, because default just check 2 arguments
+	*/
+	for _, arg := range call.Args{
+		if strings.HasSuffix(fnName, "Context") {
+			query = call.Args[1]
+		} else {
+			query = arg
+		}
+
+		if ident, ok := query.(*ast.Ident); ok && ident.Obj != nil {
+			decl := ident.Obj.Decl
+			if assign, ok := decl.(*ast.AssignStmt); ok {
+				for _, expr := range assign.Rhs {
+					issue := s.checkFormatting(expr, ctx)
+					if issue != nil {
+						return issue, err
+					}
 				}
 			}
 		}
 	}
-
 	return nil, nil
 }
 
 func (s *sqlStrFormat) checkFormatting(n ast.Node, ctx *gosec.Context) *gosec.Issue {
 	// argIndex changes the function argument which gets matched to the regex
 	argIndex := 0
-	if node := s.fmtCalls.ContainsPkgCallExpr(n, ctx, false); node != nil {
+	node := s.fmtCalls.ContainsPkgCallExpr(n, ctx, false)
+
+	if node != nil {
 		// if the function is fmt.Fprintf, search for SQL statement in Args[1] instead
 		if sel, ok := node.Fun.(*ast.SelectorExpr); ok {
 			if sel.Sel.Name == "Fprintf" {
@@ -256,7 +263,7 @@ func (s *sqlStrFormat) checkFormatting(n ast.Node, ctx *gosec.Context) *gosec.Is
 	return nil
 }
 
-// Check SQL query formatting issues such as "fmt.Sprintf("SELECT * FROM foo where '%s', userInput)"
+// Match Check SQL query formatting issues such as "fmt.Sprintf("SELECT * FROM foo where '%s', userInput)"
 func (s *sqlStrFormat) Match(n ast.Node, ctx *gosec.Context) (*gosec.Issue, error) {
 	switch stmt := n.(type) {
 	case *ast.AssignStmt:
@@ -298,6 +305,9 @@ func NewSQLStrFormat(id string, conf gosec.Config) (gosec.Rule, []ast.Node) {
 	rule.fmtCalls.AddAll("fmt", "Sprint", "Sprintf", "Sprintln", "Fprintf")
 	rule.noIssue.AddAll("os", "Stdout", "Stderr")
 	rule.noIssueQuoted.Add("github.com/lib/pq", "QuoteIdentifier")
+
+	// added by Kevinlpd
+	rule.AddAll("database", "TxExec", "Exec")
 
 	return rule, []ast.Node{(*ast.AssignStmt)(nil), (*ast.ExprStmt)(nil)}
 }
